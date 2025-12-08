@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: dashboard-postgres
+    environment:
+      POSTGRES_DB: dashboard
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dashboard-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: dashboard-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - dashboard-network
+
+  microsurvey-mock:
+    build:
+      context: ./microsurvey-mock
+      dockerfile: Dockerfile
+    container_name: microsurvey-mock
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - dashboard-network
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: dashboard-api
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/dashboard
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production_min_32_chars}
+      API_KEY_PEPPER: ${API_KEY_PEPPER:-dev_pepper_change_in_production}
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+      MICROSURVEY_BASE_URL: http://microsurvey-mock:4000
+      MICROSURVEY_API_KEY: mock_api_key
+      USE_MOCK_MICROSURVEY: "true"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      microsurvey-mock:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - dashboard-network
+    command: sh -c "npm run migrate && npm run dev"
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: dashboard-worker
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/dashboard
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production_min_32_chars}
+      API_KEY_PEPPER: ${API_KEY_PEPPER:-dev_pepper_change_in_production}
+      MICROSURVEY_BASE_URL: http://microsurvey-mock:4000
+      MICROSURVEY_API_KEY: mock_api_key
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - dashboard-network
+    command: node src/workers/surveyWorker.js
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: dashboard-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE: http://localhost:5000/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    networks:
+      - dashboard-network
+    command: npm run dev -- --host
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  dashboard-network:
+    driver: bridge

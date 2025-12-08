@@ -1,0 +1,54 @@
+# ============================================
+# FILE: backend/Dockerfile.nosharp (ALTERNATIVE)
+# Lightweight build without image processing
+# Use this if you handle images client-side only
+# ============================================
+
+FROM node:18-alpine AS base
+WORKDIR /app
+RUN apk add --no-cache postgresql-client wget
+
+# Dependencies stage
+FROM base AS deps
+COPY package*.json ./
+
+# Remove sharp and multer from dependencies before install
+RUN npm pkg delete dependencies.sharp dependencies.multer dependencies.@aws-sdk/client-s3 && \
+    npm ci --only=production && \
+    npm cache clean --force
+
+# Development stage
+FROM base AS dev
+COPY package*.json ./
+RUN npm pkg delete dependencies.sharp dependencies.multer dependencies.@aws-sdk/client-s3 && \
+    npm install && \
+    npm cache clean --force
+COPY . .
+EXPOSE 5000
+CMD ["npm", "run", "dev"]
+
+# Production stage
+FROM base AS prod
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/package*.json ./
+COPY . .
+
+RUN rm -f .env
+
+EXPOSE 5000
+USER node
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:5000/api/health || exit 1
+
+CMD ["npm", "start"]
+
+# ============================================
+# USAGE:
+# docker build -f Dockerfile.nosharp -t dashboard-api:nosharp .
+# 
+# NOTE: With this image, you must:
+# 1. Remove IMAGE_STORAGE, IMAGE_* env vars
+# 2. Handle image compression client-side
+# 3. Pass image_url directly to Micro-Survey API
+# ============================================
