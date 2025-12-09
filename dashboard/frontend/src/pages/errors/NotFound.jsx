@@ -1,4 +1,6 @@
-// frontend/src/pages/errors/NotFound.jsx
+// ============================================
+// FILE: frontend/src/pages/errors/NotFound.jsx (FIXED)
+// ============================================
 import React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -32,3 +34,4 @@ export function NotFound() {
   );
 }
 
+export default NotFound;

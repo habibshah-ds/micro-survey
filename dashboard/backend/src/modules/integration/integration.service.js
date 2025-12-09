@@ -1,172 +1,154 @@
 // ============================================
-// Integration Service - FIXED
-// Batched DB inserts for performance (10-100x faster)
+// FILE: backend/src/modules/integration/integration.service.js (FIXED)
 // ============================================
-import { v4 as uuidv4 } from "uuid";
-import db from "../../config/db.js";
-import { ApiError } from "../../utils/ApiError.js";
+import db from '../../config/db.js';
+import crypto from 'crypto';
+import { ApiError } from '../../utils/ApiError.js';
+import { logger } from '../../lib/logger.js';
 
-const BATCH_SIZE = 100; // Insert in chunks of 100
+class IntegrationService {
+  /**
+   * Register a new CAPTCHA site
+   */
+  async registerSite(userId, data) {
+    const { organizationId, siteName, siteUrl } = data;
 
-export async function registerSite(userId, { siteName, siteUrl, organizationId }) {
-  // Verify organization ownership
-  const orgCheck = await db.query(
-    "SELECT id FROM organizations WHERE id = $1 AND owner_id = $2",
-    [organizationId, userId]
-  );
+    // Verify organization ownership
+    const orgCheck = await db.query(
+      'SELECT id FROM organizations WHERE id = $1 AND owner_id = $2',
+      [organizationId, userId]
+    );
 
-  if (orgCheck.rows.length === 0) {
-    throw new ApiError("Organization not found", 403);
+    if (orgCheck.rows.length === 0) {
+      throw ApiError.forbidden('Organization not found or access denied');
+    }
+
+    // Generate site keys
+    const siteKey = `sk_${crypto.randomBytes(16).toString('hex')}`;
+    const siteSecret = `ss_${crypto.randomBytes(32).toString('hex')}`;
+
+    const result = await db.query(
+      `INSERT INTO captcha_sites (
+        id, site_name, site_url, site_key, site_secret, organization_id, created_at
+      ) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW())
+      RETURNING *`,
+      [siteName, siteUrl, siteKey, siteSecret, organizationId]
+    );
+
+    return result.rows[0];
   }
 
-  // Generate site key and secret
-  const siteKey = `sk_${uuidv4().replace(/-/g, "")}`;
-  const siteSecret = `ss_${uuidv4().replace(/-/g, "")}`;
+  /**
+   * Get site statistics
+   */
+  async getSiteStats(siteKey) {
+    const result = await db.query(
+      `SELECT 
+        cs.site_name,
+        COUNT(qr.id) as total_responses,
+        COUNT(DISTINCT qr.session_id) as unique_sessions
+      FROM captcha_sites cs
+      LEFT JOIN questions q ON q.organization_id = cs.organization_id
+      LEFT JOIN question_responses qr ON qr.question_id = q.id
+      WHERE cs.site_key = $1
+      GROUP BY cs.id, cs.site_name`,
+      [siteKey]
+    );
 
-  // Store site registration
-  const result = await db.query(
-    `INSERT INTO captcha_sites (
-      id, site_name, site_url, site_key, site_secret,
-      organization_id, is_active, created_at
-    )
-    VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
-    RETURNING id, site_name, site_url, site_key, is_active, created_at`,
-    [uuidv4(), siteName, siteUrl, siteKey, siteSecret, organizationId]
-  );
+    if (result.rows.length === 0) {
+      throw ApiError.notFound('Site not found');
+    }
 
-  return {
-    ...result.rows[0],
-    siteSecret, // Only return once during registration
-  };
-}
-
-export async function getSiteStats(siteKey) {
-  const siteResult = await db.query(
-    "SELECT id, organization_id FROM captcha_sites WHERE site_key = $1 AND is_active = true",
-    [siteKey]
-  );
-
-  if (siteResult.rows.length === 0) {
-    throw new ApiError("Invalid site key", 404);
+    return result.rows[0];
   }
 
-  const site = siteResult.rows[0];
+  /**
+   * Push responses (batch insert)
+   */
+  async pushResponses(siteKey, responses) {
+    if (!Array.isArray(responses) || responses.length === 0) {
+      throw ApiError.badRequest('Responses array is required');
+    }
 
-  // Get questions for this organization
-  const questionsResult = await db.query(
-    "SELECT COUNT(*) as count FROM questions WHERE organization_id = $1 AND is_active = true",
-    [site.organization_id]
-  );
+    // Verify site exists
+    const siteCheck = await db.query(
+      'SELECT id, organization_id FROM captcha_sites WHERE site_key = $1',
+      [siteKey]
+    );
 
-  // Get total responses for this site
-  const responsesResult = await db.query(
-    `SELECT COUNT(*) as count FROM question_responses qr
-     JOIN questions q ON qr.question_id = q.id
-     WHERE q.organization_id = $1`,
-    [site.organization_id]
-  );
+    if (siteCheck.rows.length === 0) {
+      throw ApiError.notFound('Invalid site key');
+    }
 
-  return {
-    siteId: site.id,
-    totalQuestions: parseInt(questionsResult.rows[0].count, 10),
-    totalResponses: parseInt(responsesResult.rows[0].count, 10),
-  };
-}
-
-// FIXED: Batched inserts instead of row-by-row
-export async function pushResponses(siteKey, responses) {
-  // Verify site key
-  const siteResult = await db.query(
-    "SELECT id, organization_id FROM captcha_sites WHERE site_key = $1 AND is_active = true",
-    [siteKey]
-  );
-
-  if (siteResult.rows.length === 0) {
-    throw new ApiError("Invalid site key", 401);
-  }
-
-  if (!responses || !Array.isArray(responses) || responses.length === 0) {
-    return { inserted: 0, responseIds: [] };
-  }
-
-  // Process in chunks to avoid parameter limit
-  const allIds = [];
-  
-  for (let i = 0; i < responses.length; i += BATCH_SIZE) {
-    const chunk = responses.slice(i, i + BATCH_SIZE);
-    
-    // Build parameterized batch insert
+    // Build batched insert
     const values = [];
     const params = [];
     let paramIndex = 1;
-    
-    chunk.forEach(response => {
+
+    for (const response of responses) {
+      if (!response.questionId) continue;
+
       values.push(
-        `(gen_random_uuid(), $${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5}, $${paramIndex+6}, NOW())`
+        `(gen_random_uuid(), $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, NOW())`
       );
+
       params.push(
         response.questionId,
-        response.responseText,
+        response.responseText || null,
         response.responseData ? JSON.stringify(response.responseData) : null,
-        response.sessionId,
-        response.ipAddress,
-        response.userAgent,
-        response.countryCode
+        response.sessionId || null,
+        response.ipAddress || null,
+        response.userAgent || null,
+        response.countryCode || null
       );
-      paramIndex += 7;
-    });
-    
-    const query = `
-      INSERT INTO question_responses (
-        id, question_id, response_text, response_data,
-        session_id, ip_address, user_agent, country_code, created_at
-      )
-      VALUES ${values.join(', ')}
-      RETURNING id
-    `;
-    
-    try {
-      const result = await db.query(query, params);
-      allIds.push(...result.rows.map(r => r.id));
-    } catch (error) {
-      console.error('[pushResponses] Batch insert error:', error.message);
-      // Continue with next chunk even if one fails
     }
+
+    if (values.length === 0) {
+      throw ApiError.badRequest('No valid responses to insert');
+    }
+
+    const insertSQL = `
+      INSERT INTO question_responses
+        (id, question_id, response_text, response_data, session_id, ip_address, user_agent, country_code, created_at)
+      VALUES ${values.join(', ')}
+    `;
+
+    await db.query(insertSQL, params);
+
+    logger.info('Batch responses inserted', {
+      siteKey,
+      count: values.length,
+    });
+
+    return { inserted: values.length };
   }
 
-  return {
-    inserted: allIds.length,
-    responseIds: allIds,
-    batches: Math.ceil(responses.length / BATCH_SIZE),
-  };
-}
+  /**
+   * Get active questions for a site
+   */
+  async getActiveQuestions(siteKey) {
+    const result = await db.query(
+      `SELECT q.id, q.question_text, q.question_type, q.options
+       FROM questions q
+       JOIN captcha_sites cs ON q.organization_id = cs.organization_id
+       WHERE cs.site_key = $1 AND q.is_active = true
+       ORDER BY q.created_at DESC`,
+      [siteKey]
+    );
 
-export async function getActiveQuestions(siteKey) {
-  // Verify site key
-  const siteResult = await db.query(
-    "SELECT organization_id FROM captcha_sites WHERE site_key = $1 AND is_active = true",
-    [siteKey]
-  );
-
-  if (siteResult.rows.length === 0) {
-    throw new ApiError("Invalid site key", 401);
+    return result.rows.map(q => ({
+      ...q,
+      options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
+    }));
   }
-
-  const site = siteResult.rows[0];
-
-  // Get active questions for this organization
-  const result = await db.query(
-    `SELECT id, question_text, question_type, options
-     FROM questions
-     WHERE organization_id = $1 AND is_active = true
-     ORDER BY created_at DESC`,
-    [site.organization_id]
-  );
-
-  return result.rows.map(q => ({
-    id: q.id,
-    questionText: q.question_text,
-    questionType: q.question_type,
-    options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
-  }));
 }
+
+const integrationService = new IntegrationService();
+
+export default integrationService;
+
+// Named exports for compatibility with modules importing specific functions
+export const registerSite = integrationService.registerSite.bind(integrationService);
+export const getSiteStats = integrationService.getSiteStats.bind(integrationService);
+export const pushResponses = integrationService.pushResponses.bind(integrationService);
+export const getActiveQuestions = integrationService.getActiveQuestions.bind(integrationService);

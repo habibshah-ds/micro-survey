@@ -1,9 +1,15 @@
+// ============================================
+// FILE: backend/src/middleware/auth.js (SECURITY FIXED)
+// ============================================
 import { verifyToken } from "../utils/jwt.js";
+import { ApiError } from "../utils/ApiError.js";
 
 export function authRequired(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
+
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      // SECURITY: Remove development bypass - force authentication
       return res.status(401).json({ 
         success: false, 
         message: "No token provided" 
@@ -23,7 +29,7 @@ export function authRequired(req, res, next) {
   } catch (error) {
     return res.status(401).json({ 
       success: false, 
-      message: "Invalid or expired token" 
+      message: error.message || "Invalid or expired token" 
     });
   }
 }

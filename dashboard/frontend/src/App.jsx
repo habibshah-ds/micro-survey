@@ -1,4 +1,6 @@
-// frontend/src/App.jsx - UPDATED with Dashboard Shell
+// ============================================
+// FILE: frontend/src/App.jsx (FIXED IMPORTS)
+// ============================================
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
@@ -16,7 +18,8 @@ import QuestionBuilderPage from "./pages/QuestionBuilder";
 import QuestionListPage from "./pages/QuestionList";
 import AnalyticsPage from "./pages/Analytics";
 import OrganizationsPage from "./pages/Organizations";
-import { NotFound, Unauthorized } from "./pages/errors/NotFound";
+import { NotFound } from "./pages/errors/NotFound";
+import { Unauthorized } from "./pages/errors/Unauthorized";
 
 // Placeholder pages for future features
 const PlaceholderPage = ({ title }) => (
@@ -52,35 +55,18 @@ export default function App() {
                 </ProtectedRoute>
               }
             >
-              {/* Main dashboard */}
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<DashboardPage />} />
-
-              {/* Organizations */}
               <Route path="organizations" element={<OrganizationsPage />} />
-
-              {/* Questions */}
               <Route path="questions" element={<QuestionListPage />} />
               <Route path="questions/new" element={<QuestionBuilderPage />} />
               <Route path="questions/:id/edit" element={<QuestionBuilderPage />} />
-
-              {/* Analytics */}
               <Route path="analytics" element={<PlaceholderPage title="Analytics" />} />
               <Route path="analytics/:questionId" element={<AnalyticsPage />} />
-
-              {/* Surveys (placeholder) */}
               <Route path="surveys" element={<PlaceholderPage title="Surveys" />} />
-
-              {/* API Keys (placeholder) */}
               <Route path="api-keys" element={<PlaceholderPage title="API Keys" />} />
-
-              {/* Billing (placeholder) */}
               <Route path="billing" element={<PlaceholderPage title="Billing" />} />
-
-              {/* Webhooks (placeholder) */}
               <Route path="webhooks" element={<PlaceholderPage title="Webhooks" />} />
-
-              {/* Settings */}
               <Route path="settings" element={<PlaceholderPage title="Settings" />} />
               <Route path="settings/profile" element={<PlaceholderPage title="Profile Settings" />} />
             </Route>

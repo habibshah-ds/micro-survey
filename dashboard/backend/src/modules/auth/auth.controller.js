@@ -4,6 +4,7 @@
 // ============================================
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import * as authService from './auth.service.js';
+import db from '../../config/db.js';
 import { ApiResponse } from '../../utils/ApiResponse.js';
 
 /**

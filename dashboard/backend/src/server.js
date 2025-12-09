@@ -51,6 +51,33 @@ if (config.security.trustProxy) {
 app.use("/api/", rateLimitMiddleware);
 
 // Body parsing
+// Normalize Content-Type charset (some test clients send uppercase or quoted charset)
+app.use((req, res, next) => {
+  const ct = req.headers['content-type'];
+  if (ct) {
+    const parts = ct.split(';').map(p => p.trim());
+    const type = parts[0].toLowerCase();
+
+    // If JSON, force a safe lowercase charset to avoid iconv/raw-body errors
+    if (type === 'application/json') {
+      req.headers['content-type'] = 'application/json; charset=utf-8';
+    } else {
+      // Normalize any charset param to lowercase and strip quotes for other types
+      const params = parts.slice(1).map(p => {
+        const [k, v] = p.split('=');
+        if (!v) return p;
+        if (k.trim().toLowerCase() === 'charset') {
+          const cleaned = v.replace(/"/g, '').trim().toLowerCase();
+          return `charset=${cleaned}`;
+        }
+        return p;
+      });
+      req.headers['content-type'] = [type, ...params].join('; ');
+    }
+  }
+  next();
+});
+
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
@@ -158,10 +185,17 @@ async function startServer() {
     });
   } catch (error) {
     logger.error("❌ Failed to start server:", error);
+    // During tests we should not exit the process; throw the error so the test runner can handle it.
+    if (process.env.NODE_ENV === 'test') {
+      throw error;
+    }
     process.exit(1);
   }
 }
 
-startServer();
+// Only start the server automatically when not running in test environment.
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
 
 export default app;

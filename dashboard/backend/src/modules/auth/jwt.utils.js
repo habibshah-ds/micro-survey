@@ -3,6 +3,7 @@
 // ============================================
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
 import { config } from '../../config/index.js';
 
 /**
@@ -16,6 +17,7 @@ export function generateAccessToken(payload) {
       sub: payload.userId,
       email: payload.email,
       role: payload.role,
+      jti: uuidv4(),
       type: 'access',
     },
     config.jwt.secret,

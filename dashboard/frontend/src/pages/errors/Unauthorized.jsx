@@ -1,4 +1,9 @@
-// frontend/src/pages/errors/Unauthorized.jsx
+// ============================================
+// FILE: frontend/src/pages/errors/Unauthorized.jsx (FIXED)
+// ============================================
+import React from 'react';
+import { Link } from 'react-router-dom';
+
 export function Unauthorized() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
@@ -28,3 +33,5 @@ export function Unauthorized() {
     </div>
   );
 }
+
+export default Unauthorized;

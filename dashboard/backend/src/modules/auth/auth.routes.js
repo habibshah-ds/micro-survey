@@ -28,6 +28,14 @@ router.post(
   authController.signup
 );
 
+// Backwards-compatible alias: some clients/tests expect `/register`
+router.post(
+  '/register',
+  authRateLimiter,
+  validate(signupSchema),
+  authController.signup
+);
+
 router.post(
   '/login',
   authRateLimiter,

@@ -3,16 +3,7 @@
 -- Enhance survey snapshots and add missing constraints
 -- ============================================
 
--- Add published_snapshot_id to surveys if not exists
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'surveys' AND column_name = 'published_snapshot_id'
-  ) THEN
-    ALTER TABLE surveys ADD COLUMN published_snapshot_id UUID REFERENCES survey_snapshots(id);
-  END IF;
-END $$;
+-- NOTE: Ensure `survey_snapshots` exists before adding a FK column on `surveys`.
 
 -- Ensure survey_snapshots table exists with all fields
 CREATE TABLE IF NOT EXISTS survey_snapshots (
@@ -189,4 +180,15 @@ BEGIN
   RAISE NOTICE '   - survey_responses table ready';
   RAISE NOTICE '   - questions table enhanced with survey_id, key, position, meta';
   RAISE NOTICE '   - All indexes created';
+END $$;
+
+-- Add published_snapshot_id to surveys if not exists (after table exists)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'surveys' AND column_name = 'published_snapshot_id'
+  ) THEN
+    ALTER TABLE surveys ADD COLUMN published_snapshot_id UUID REFERENCES survey_snapshots(id);
+  END IF;
 END $$;

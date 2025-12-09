@@ -69,6 +69,26 @@ class SurveysController {
     const embedCode = await surveysService.getEmbedCode(req.params.id, req.user.userId);
     ApiResponse.success(res, 200, 'Embed code generated', { embedCode });
   });
+
+  duplicateSurvey = asyncHandler(async (req, res) => {
+    const survey = await surveysService.duplicate(req.params.id, req.user.userId, req.body);
+    ApiResponse.created(res, 'Survey duplicated successfully', { survey });
+  });
+
+  getSurveyPreview = asyncHandler(async (req, res) => {
+    const preview = await surveysService.getPreview(req.params.id, req.user.userId);
+    ApiResponse.success(res, 200, 'Survey preview retrieved', { preview });
+  });
+
+  getSnapshotHistory = asyncHandler(async (req, res) => {
+    const snapshots = await surveysService.getSnapshotHistory(req.params.id, req.user.userId);
+    ApiResponse.success(res, 200, 'Snapshot history retrieved', { snapshots });
+  });
+
+  getSnapshot = asyncHandler(async (req, res) => {
+    const snapshot = await surveysService.getSnapshot(req.params.id, req.params.snapshotId, req.user.userId);
+    ApiResponse.success(res, 200, 'Snapshot retrieved', { snapshot });
+  });
 }
 
 export default new SurveysController();

@@ -36,7 +36,7 @@ describe('Password Utilities', () => {
     });
     
     it('should return false for non-matching password', async () => {
-      const hash = await hashPassword('correct');
+      const hash = await hashPassword('Correct1');
       const isValid = await comparePassword('wrong', hash);
       
       expect(isValid).toBe(false);

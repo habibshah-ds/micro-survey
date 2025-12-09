@@ -13,7 +13,7 @@ import db from '../src/config/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-describe('Image Upload API', () => {
+describe.skip('Image Upload API (skipped - uploads removed)', () => {
   let accessToken;
   let userId;
 
