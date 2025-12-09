@@ -60,7 +60,8 @@ app.use((req, res, next) => {
 
     // If JSON, force a safe lowercase charset to avoid iconv/raw-body errors
     if (type === 'application/json') {
-      req.headers['content-type'] = 'application/json; charset=utf-8';
+      // Keep it simple for JSON - set bare application/json to avoid iconv/raw-body charset parsing issues
+      req.headers['content-type'] = 'application/json';
     } else {
       // Normalize any charset param to lowercase and strip quotes for other types
       const params = parts.slice(1).map(p => {
