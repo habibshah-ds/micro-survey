@@ -2,7 +2,7 @@
 // FILE: backend/tests/imageUpload.test.js
 // Integration tests for image upload
 // ============================================
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll as before, afterAll as after, beforeEach } from '@jest/globals';
 import assert from 'node:assert';
 import request from 'supertest';
 import fs from 'fs';

@@ -28,3 +28,7 @@ docker-restart: ## Restart Docker services
 	docker compose down
 	docker compose up -d
 	@echo "$(GREEN)✅ Restart complete!$(NC)"
+
+
++.PHONY: dev
++dev: docker-up

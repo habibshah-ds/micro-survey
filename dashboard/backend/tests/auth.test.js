@@ -1,4 +1,4 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll as before, afterAll as after } from '@jest/globals';
 import assert from 'node:assert';
 import request from 'supertest';
 import app from '../src/server.js';

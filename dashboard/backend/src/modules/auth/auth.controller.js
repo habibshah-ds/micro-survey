@@ -28,6 +28,7 @@ export const signup = asyncHandler(async (req, res) => {
     data: {
       user: result.user,
       accessToken: result.accessToken,
+      csrfToken: req.cookies.csrfToken || null,
     },
   });
 });
@@ -53,6 +54,7 @@ export const login = asyncHandler(async (req, res) => {
     data: {
       user: result.user,
       accessToken: result.accessToken,
+      csrfToken: req.cookies.csrfToken || null,
     },
   });
 });

@@ -19,6 +19,16 @@ import { logger } from "./lib/logger.js";
 
 const app = express();
 
+// Quick content-type normalizer BEFORE other middleware (catches uppercase/quoted charset issues)
+app.use((req, res, next) => {
+  const ct = req.headers['content-type'];
+  if (ct && /charset\s*=\s*"?UTF-8"?/i.test(ct)) {
+    // remove charset to let body-parser default to utf-8
+    req.headers['content-type'] = ct.split(';')[0].trim();
+  }
+  next();
+});
+
 // Security middleware
 app.use(
   helmet({
@@ -79,7 +89,39 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: "1mb" }));
+// Custom lightweight JSON body parser to avoid charset/encoding issues in test environments
+app.use((req, res, next) => {
+  const ct = (req.headers['content-type'] || '').toLowerCase();
+  if (req.method === 'GET' || req.method === 'HEAD' || !ct.includes('application/json')) {
+    return next();
+  }
+
+  let received = 0;
+  const chunks = [];
+  req.on('data', (chunk) => {
+    received += chunk.length;
+    // Max 1MB
+    if (received > 1024 * 1024) {
+      res.status(413).json({ success: false, message: 'Payload too large' });
+      req.destroy();
+      return;
+    }
+    chunks.push(chunk);
+  });
+
+  req.on('end', () => {
+    try {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      req.body = raw ? JSON.parse(raw) : {};
+      next();
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  req.on('error', (err) => next(err));
+});
+
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
 app.use(compression());

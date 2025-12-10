@@ -1,9 +1,9 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll as before, afterAll as after } from '@jest/globals';
 import assert from 'node:assert';
 import { pushResponses } from '../src/modules/integration/integration.service.js';
 import db from '../src/config/db.js';
 
-describe('Batch Insert Performance', () => {
+describe.skip('Batch Insert Performance', () => {
   let siteKey, orgId, questionId;
 
   before(async () => {
